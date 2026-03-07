@@ -6,22 +6,20 @@ src_dir = Path(__file__).parent.parent
 if str(src_dir) not in sys.path:
     sys.path.insert(0, str(src_dir))
 
-from fastmcp import FastMCP, Context
+from fastmcp import Context, FastMCP
 
 # 尝试使用绝对导入（支持 mcp run）
 try:
+    from grok_search.config import config
+    from grok_search.logger import log_info
     from grok_search.providers.grok import GrokSearchProvider
     from grok_search.utils import format_search_results
-    from grok_search.logger import log_info
-    from grok_search.config import config
 except ImportError:
     # 降级到相对导入（pip install -e . 后）
-    from .providers.grok import GrokSearchProvider
-    from .utils import format_search_results
-    from .logger import log_info
     from .config import config
+    from .logger import log_info
+    from .providers.grok import GrokSearchProvider
 
-import asyncio
 
 mcp = FastMCP("grok-search")
 
@@ -157,6 +155,7 @@ async def web_fetch(url: str, ctx: Context = None) -> str:
 )
 async def get_config_info() -> str:
     import json
+
     import httpx
 
     config_info = config.get_config_info()
@@ -360,8 +359,8 @@ async def toggle_builtin_tools(action: str = "status") -> str:
 
 
 def main():
-    import signal
     import os
+    import signal
     import threading
 
     # 信号处理（仅主线程）
@@ -374,8 +373,8 @@ def main():
 
     # Windows 父进程监控
     if sys.platform == 'win32':
-        import time
         import ctypes
+        import time
         parent_pid = os.getppid()
 
         def is_parent_alive(pid):
@@ -400,7 +399,7 @@ def main():
         threading.Thread(target=monitor_parent, daemon=True).start()
 
     try:
-        mcp.run(transport="stdio")
+        mcp.run(transport="stdio", show_banner=False)
     except KeyboardInterrupt:
         pass
     finally:
