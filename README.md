@@ -1,11 +1,11 @@
 ![这是图片](./images/title.png)
 <div align="center">
 
-<!-- # Grok Search MCP -->
+<!-- # Smart Search MCP -->
 
 [English](./docs/README_EN.md) | 简体中文
 
-**通过 MCP 协议将 Grok 搜索能力集成到 Claude，显著增强文档检索与事实核查能力**
+**多搜索源智能 MCP 服务器（Grok + Exa），为 Claude 提供实时综合搜索与源头精准检索能力**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -17,16 +17,21 @@
 
 ## 概述
 
-Grok Search MCP 是一个基于 [FastMCP](https://github.com/jlowin/fastmcp) 构建的 MCP（Model Context Protocol）服务器，通过转接第三方平台（如 Grok）的强大搜索能力，为 Claude、Claude Code 等 AI 模型提供实时网络搜索功能。
+Smart Search MCP 是一个基于 [FastMCP](https://github.com/jlowin/fastmcp) 构建的多搜索源 MCP（Model Context Protocol）服务器，集成 **Grok**（实时综合搜索）和 **Exa**（源头精准检索）两大搜索引擎，为 Claude、Claude Code 等 AI 模型提供互补的智能搜索能力。
 
 ### 核心价值
+- **双引擎互补**：Grok 负责实时综合搜索与多源聚合，Exa 负责官方文档、API 参考等源头精准检索
 - **突破知识截止限制**：让 Claude 访问最新的网络信息，不再受训练数据时间限制
-- **增强事实核查**：实时搜索验证信息的准确性和时效性
-- **结构化输出**：返回包含标题、链接、摘要的标准化 JSON，便于 AI 模型理解与引用
+- **增强事实核查**：多源交叉验证信息的准确性和时效性
+- **结构化输出**：返回标准化 JSON，便于 AI 模型理解与引用
 - **即插即用**：通过 MCP 协议无缝集成到 Claude Desktop、Claude Code 等客户端
 
+**搜索路由**：
+- **实时综合 / 社区讨论 / 多源聚合** → `web_search`（Grok）
+- **官方文档 / API 参考 / 源头精准检索** → `exa_search`（Exa）
+- **相似页面发现** → `exa_find_similar`（Exa）
 
-**工作流程**：`Claude → MCP → Grok API → 搜索/抓取 → 结构化返回`
+**工作流程**：`Claude → MCP → Grok/Exa API → 搜索/抓取 → 结构化返回`
 
 <details>
 <summary><b>💡 更多选择Grok  search 的理由</b></summary>
@@ -49,6 +54,10 @@ Grok Search MCP 是一个基于 [FastMCP](https://github.com/jlowin/fastmcp) 构
 - ✅ 动态模型切换（支持切换不同 Grok 模型并持久化保存）
 - ✅ **工具路由控制（一键禁用官方 WebSearch/WebFetch，强制使用 GrokSearch）**
 - ✅ **自动时间注入（搜索时自动获取本地时间，确保时间相关查询的准确性）**
+- ✅ **Exa 神经搜索（源头精准检索，官方文档、API 参考、研究论文）**
+- ✅ **Exa 相似页面发现（基于 URL 查找相关资源）**
+- ✅ **6 阶段搜索规划引擎（含阶段顺序校验 & 复杂度级别限制）**
+- ✅ **输出净化（自动剥离 `<think>` 标签和 AI 拒绝前缀段落）**
 - ✅ 可扩展架构，支持添加其他搜索 Provider
 </details>
 
@@ -89,26 +98,37 @@ wget -qO- https://astral.sh/uv/install.sh | sh
 </details>
 
 
-### Step 1. 安装 Grok Search MCP 
+### Step 1. 安装 Smart Search MCP
 
 使用 `claude mcp add-json` 一键安装并配置：
-**注意：**  需要替换 **GROK_API_URL** 以及 **GROK_API_KEY**这两个字段为你自己的站点以及密钥，目前只支持openai格式，所以如果需要使用grok，也需要使用转为openai格式的grok镜像站
+**注意：**  需要替换相应的 API URL 和 Key 字段。Grok 目前只支持 OpenAI 格式接口；Exa 需要到 [exa.ai](https://exa.ai) 获取 API Key（可选，不配置则 Exa 相关工具不可用）。
 
 ```bash
-claude mcp add-json grok-search --scope user '{
+claude mcp add-json smart-search --scope user '{
   "type": "stdio",
   "command": "uvx",
   "args": [
     "--from",
     "git+https://github.com/GuDaStudio/GrokSearch",
-    "grok-search"
+    "smart-search"
   ],
   "env": {
     "GROK_API_URL": "https://your-api-endpoint.com/v1",
-    "GROK_API_KEY": "your-api-key-here"
+    "GROK_API_KEY": "your-api-key-here",
+    "EXA_API_KEY": "your-exa-api-key-here"
   }
 }'
 ```
+
+> **环境变量说明**：
+> | 变量 | 必填 | 说明 |
+> |------|------|------|
+> | `GROK_API_URL` | ✅ | Grok API 端点（OpenAI 格式） |
+> | `GROK_API_KEY` | ✅ | Grok API 密钥 |
+> | `EXA_API_KEY` | ❌ | Exa API 密钥（不配置则 Exa 工具返回友好错误） |
+> | `EXA_BASE_URL` | ❌ | Exa API 地址（默认 `https://api.exa.ai`） |
+> | `EXA_TIMEOUT_SECONDS` | ❌ | Exa 请求超时（默认 30 秒） |
+> | `GROK_OUTPUT_CLEANUP` | ❌ | 输出净化开关（默认 `true`，剥离 `<think>` 标签和拒绝前缀） |
 
 
 ### Step 2. 验证安装 & 检查MCP配置
@@ -117,7 +137,7 @@ claude mcp add-json grok-search --scope user '{
 claude mcp list
 ```
 
-应能看到 `grok-search` 服务器已注册。
+应能看到 `smart-search` 服务器已注册。
 
 配置完成后，**强烈建议**在 Claude 对话中运行配置测试，以确保一切正常：
 
@@ -267,7 +287,7 @@ claude mcp list
 
 #### MCP 工具说明
 
-本项目提供五个 MCP 工具：
+本项目提供七个 MCP 工具：
 
 ##### `web_search` - 网络搜索
 
@@ -338,6 +358,31 @@ Model Context Protocol (MCP) 是一个标准化的通信协议，用于连接 AI
 </details>
 
 
+##### `exa_search` - Exa 精准搜索
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `query` | string | ✅ | - | 搜索查询 |
+| `num_results` | int | ❌ | `5` | 返回结果数量 |
+| `search_type` | string | ❌ | `"neural"` | 搜索模式：`neural`（语义）/ `keyword`（关键词）/ `auto` |
+| `include_text` | bool | ❌ | `false` | 是否返回页面正文 |
+| `include_highlights` | bool | ❌ | `false` | 是否返回亮点片段 |
+| `start_published_date` | string | ❌ | `""` | ISO 日期过滤（如 `"2024-01-01T00:00:00.000Z"`） |
+| `include_domains` | string | ❌ | `""` | 域名白名单（逗号分隔） |
+| `exclude_domains` | string | ❌ | `""` | 域名黑名单（逗号分隔） |
+| `category` | string | ❌ | `""` | 分类过滤：`company` / `research paper` / `news` / `github` 等 |
+
+**定位**：源头精准检索，适合官方文档、API 参考、产品页面、研究论文等低噪声场景
+
+##### `exa_find_similar` - Exa 相似页面发现
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `url` | string | ✅ | - | 参考 URL |
+| `num_results` | int | ❌ | `5` | 返回结果数量 |
+
+**功能**：基于给定 URL 发现相似的网页资源
+
 ##### `get_config_info` - 配置信息查询
 
 **无需参数**。显示配置状态、测试 API 连接、返回响应时间和可用模型数量（API Key 自动脱敏）
@@ -368,7 +413,7 @@ Model Context Protocol (MCP) 是一个标准化的通信协议，用于连接 AI
 
 **功能**：
 - 切换用于搜索和抓取操作的默认 Grok 模型
-- 配置自动持久化到 `~/.config/grok-search/config.json`
+- 配置自动持久化到 `~/.config/smart-search/config.json`
 - 支持跨会话保持设置
 - 适用于性能优化或质量对比测试
 
@@ -381,7 +426,7 @@ Model Context Protocol (MCP) 是一个标准化的通信协议，用于连接 AI
   "previous_model": "grok-4-fast",
   "current_model": "grok-2-latest",
   "message": "模型已从 grok-4-fast 切换到 grok-2-latest",
-  "config_file": "/home/user/.config/grok-search/config.json"
+  "config_file": "/home/user/.config/smart-search/config.json"
 }
 ```
 
@@ -445,14 +490,17 @@ Model Context Protocol (MCP) 是一个标准化的通信协议，用于连接 AI
 <summary><h2>项目架构</h2>（点击展开）</summary>
 
 ```
-src/grok_search/
-├── config.py          # 配置管理（环境变量）
-├── server.py          # MCP 服务入口（注册工具）
+src/smart_search/
+├── config.py          # 配置管理（环境变量 + 输出净化开关）
+├── server.py          # MCP 服务入口（注册工具 + 规划 session 错误处理）
+├── planning.py        # 6 阶段搜索规划引擎（含阶段顺序校验）
+├── sources.py         # 信源解析 + 缓存 + 输出净化
 ├── logger.py          # 日志系统
-├── utils.py           # 格式化工具
+├── utils.py           # 格式化工具 + 搜索提示词
 └── providers/
     ├── base.py        # SearchProvider 基类
-    └── grok.py        # Grok API 实现
+    ├── grok.py        # Grok API 实现
+    └── exa.py         # Exa API 实现
 ```
 
 </details>
@@ -463,7 +511,13 @@ src/grok_search/
 A: 注册第三方平台 → 获取 API Endpoint 和 Key → 使用 `claude mcp add-json` 配置
 
 **Q: 配置后如何验证？**
-A: 在 Claude 对话中说"显示 grok-search 配置信息"，查看连接测试结果
+A: 在 Claude 对话中说"显示 smart-search 配置信息"，查看连接测试结果
+
+## 致谢
+
+本项目 fork 自 [grok-search](https://github.com/AirswitchAsa/grok-search)，感谢原作者 **AirswitchAsa** 的出色工作。
+
+规划阶段顺序校验与输出净化功能参考了上游 [PR #35](https://github.com/AirswitchAsa/grok-search/pull/35)（作者 **Boulea7**），在此表示感谢。
 
 ## 许可证
 

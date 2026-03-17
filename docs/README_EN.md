@@ -49,6 +49,10 @@ Comparison with other search solutions:
 - ✅ Dynamic model switching (switch between Grok models with persistent settings)
 - ✅ **Tool routing control (one-click disable built-in WebSearch/WebFetch, force use GrokSearch)**
 - ✅ **Automatic time injection (automatically gets local time during search for accurate time-sensitive queries)**
+- ✅ **Exa neural search (source-first retrieval for official docs, API references, research papers)**
+- ✅ **Exa similar page discovery (find related resources based on URL)**
+- ✅ **6-phase search planning engine (with phase ordering guards & complexity-level restrictions)**
+- ✅ **Output sanitization (auto-strip `<think>` tags and AI refusal prefixes)**
 - ✅ Extensible architecture for additional search providers
 
 ## Quick Start
@@ -472,14 +476,17 @@ Show status of built-in tools
 <summary><h2>Project Architecture</h2> (Click to expand)</summary>
 
 ```
-src/grok_search/
-├── config.py          # Configuration management (environment variables)
-├── server.py          # MCP service entry (tool registration)
+src/smart_search/
+├── config.py          # Configuration management (env vars + output cleanup toggle)
+├── server.py          # MCP service entry (tool registration + planning session errors)
+├── planning.py        # 6-phase search planning engine (with phase ordering guards)
+├── sources.py         # Source parsing + caching + output sanitization
 ├── logger.py          # Logging system
-├── utils.py           # Formatting utilities
+├── utils.py           # Formatting utilities + search prompts
 └── providers/
     ├── base.py        # SearchProvider base class
-    └── grok.py        # Grok API implementation
+    ├── grok.py        # Grok API implementation
+    └── exa.py         # Exa API implementation
 ```
 
 </details>
@@ -491,6 +498,12 @@ A: Register with a third-party platform → Obtain API Endpoint and Key → Conf
 
 **Q: How to verify configuration after setup?**
 A: Say "Show grok-search configuration info" in Claude conversation to check connection test results
+
+## Acknowledgements
+
+This project is forked from [grok-search](https://github.com/AirswitchAsa/grok-search). Thanks to the original author **AirswitchAsa** for the excellent work.
+
+The planning phase ordering guards and output sanitization features are inspired by upstream [PR #35](https://github.com/AirswitchAsa/grok-search/pull/35) (author **Boulea7**). Thank you!
 
 ## License
 
