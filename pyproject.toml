@@ -3,16 +3,17 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "grok-search"
-version = "0.1.0"
-description = "MCP server for AI model search capabilities"
+name = "smart-search"
+version = "0.3.0"
+description = "MCP server for multi-source intelligent search (Grok + Exa + Tavily + Firecrawl)"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "fastmcp>=2.0.0",
-    "httpx>=0.28.0",
+    "fastmcp>=2.3.0",
+    "httpx[socks]>=0.28.0",
     "mcp[cli]>=1.21.2",
     "tenacity>=8.0.0",
+    "pydantic>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -25,4 +26,5 @@ dev = [
 where = ["src"]
 
 [project.scripts]
-grok-search = "grok_search.server:main"
+smart-search = "smart_search.server:main"
+grok-search = "smart_search.server:main"

@@ -5,10 +5,11 @@ from pathlib import Path
 class Config:
     _instance = None
     _SETUP_COMMAND = (
-        'claude mcp add-json grok-search --scope user '
+        'claude mcp add-json smart-search --scope user '
         '\'{"type":"stdio","command":"uvx","args":["--from",'
-        '"git+https://github.com/GuDaStudio/GrokSearch","grok-search"],'
-        '"env":{"GROK_API_URL":"your-api-url","GROK_API_KEY":"your-api-key"}}\''
+        '"git+https://github.com/GuDaStudio/GrokSearch","smart-search"],'
+        '"env":{"GROK_API_URL":"your-api-url","GROK_API_KEY":"your-api-key",'
+        '"EXA_API_KEY":"your-exa-key"}}\''
     )
     _DEFAULT_MODEL = "grok-4-fast"
 
@@ -22,8 +23,12 @@ class Config:
     @property
     def config_file(self) -> Path:
         if self._config_file is None:
-            config_dir = Path.home() / ".config" / "grok-search"
-            config_dir.mkdir(parents=True, exist_ok=True)
+            config_dir = Path.home() / ".config" / "smart-search"
+            try:
+                config_dir.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                config_dir = Path.cwd() / ".smart-search"
+                config_dir.mkdir(parents=True, exist_ok=True)
             self._config_file = config_dir / "config.json"
         return self._config_file
 
@@ -81,11 +86,23 @@ class Config:
 
     @property
     def tavily_enabled(self) -> bool:
-        return os.getenv("TAVILY_ENABLED", "false").lower() in ("true", "1", "yes")
+        return os.getenv("TAVILY_ENABLED", "true").lower() in ("true", "1", "yes")
+
+    @property
+    def tavily_api_url(self) -> str:
+        return os.getenv("TAVILY_API_URL", "https://api.tavily.com")
 
     @property
     def tavily_api_key(self) -> str | None:
         return os.getenv("TAVILY_API_KEY")
+
+    @property
+    def firecrawl_api_url(self) -> str:
+        return os.getenv("FIRECRAWL_API_URL", "https://api.firecrawl.dev/v2")
+
+    @property
+    def firecrawl_api_key(self) -> str | None:
+        return os.getenv("FIRECRAWL_API_KEY")
 
     @property
     def log_level(self) -> str:
@@ -94,11 +111,27 @@ class Config:
     @property
     def log_dir(self) -> Path:
         log_dir_str = os.getenv("GROK_LOG_DIR", "logs")
-        if Path(log_dir_str).is_absolute():
-            return Path(log_dir_str)
-        user_log_dir = Path.home() / ".config" / "grok-search" / log_dir_str
-        user_log_dir.mkdir(parents=True, exist_ok=True)
-        return user_log_dir
+        log_dir = Path(log_dir_str)
+        if log_dir.is_absolute():
+            return log_dir
+
+        home_log_dir = Path.home() / ".config" / "smart-search" / log_dir_str
+        try:
+            home_log_dir.mkdir(parents=True, exist_ok=True)
+            return home_log_dir
+        except OSError:
+            pass
+
+        cwd_log_dir = Path.cwd() / log_dir_str
+        try:
+            cwd_log_dir.mkdir(parents=True, exist_ok=True)
+            return cwd_log_dir
+        except OSError:
+            pass
+
+        tmp_log_dir = Path("/tmp") / "smart-search" / log_dir_str
+        tmp_log_dir.mkdir(parents=True, exist_ok=True)
+        return tmp_log_dir
 
     def _apply_model_suffix(self, model: str) -> str:
         try:
@@ -130,13 +163,30 @@ class Config:
 
     @staticmethod
     def _mask_api_key(key: str) -> str:
-        """脱敏显示 API Key，只显示前后各 4 个字符"""
         if not key or len(key) <= 8:
             return "***"
         return f"{key[:4]}{'*' * (len(key) - 8)}{key[-4:]}"
 
+    @property
+    def output_cleanup_enabled(self) -> bool:
+        raw = os.getenv("GROK_OUTPUT_CLEANUP")
+        if raw is None:
+            raw = os.getenv("GROK_FILTER_THINK_TAGS", "true")
+        return raw.lower() in ("true", "1", "yes")
+
+    @property
+    def exa_api_key(self) -> str | None:
+        return os.getenv("EXA_API_KEY")
+
+    @property
+    def exa_base_url(self) -> str:
+        return os.getenv("EXA_BASE_URL", "https://api.exa.ai")
+
+    @property
+    def exa_timeout(self) -> float:
+        return float(os.getenv("EXA_TIMEOUT_SECONDS", "30"))
+
     def get_config_info(self) -> dict:
-        """获取配置信息（API Key 已脱敏）"""
         try:
             api_url = self.grok_api_url
             api_key_raw = self.grok_api_key
@@ -154,8 +204,15 @@ class Config:
             "GROK_DEBUG": self.debug_enabled,
             "GROK_LOG_LEVEL": self.log_level,
             "GROK_LOG_DIR": str(self.log_dir),
+            "TAVILY_API_URL": self.tavily_api_url,
             "TAVILY_ENABLED": self.tavily_enabled,
             "TAVILY_API_KEY": self._mask_api_key(self.tavily_api_key) if self.tavily_api_key else "未配置",
+            "FIRECRAWL_API_URL": self.firecrawl_api_url,
+            "FIRECRAWL_API_KEY": self._mask_api_key(self.firecrawl_api_key) if self.firecrawl_api_key else "未配置",
+            "GROK_OUTPUT_CLEANUP": self.output_cleanup_enabled,
+            "EXA_API_KEY": self._mask_api_key(self.exa_api_key) if self.exa_api_key else "未配置",
+            "EXA_BASE_URL": self.exa_base_url,
+            "EXA_TIMEOUT_SECONDS": self.exa_timeout,
             "config_status": config_status
         }
 
