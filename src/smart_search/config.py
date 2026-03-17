@@ -7,7 +7,7 @@ class Config:
     _SETUP_COMMAND = (
         'claude mcp add-json smart-search --scope user '
         '\'{"type":"stdio","command":"uvx","args":["--from",'
-        '"git+https://github.com/GuDaStudio/GrokSearch","smart-search"],'
+        '"git+https://github.com/konbakuyomu/GrokSearch","smart-search"],'
         '"env":{"GROK_API_URL":"your-api-url","GROK_API_KEY":"your-api-key",'
         '"EXA_API_KEY":"your-exa-key"}}\''
     )
