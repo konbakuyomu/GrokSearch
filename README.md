@@ -115,20 +115,35 @@ claude mcp add-json smart-search --scope user '{
   "env": {
     "GROK_API_URL": "https://your-api-endpoint.com/v1",
     "GROK_API_KEY": "your-api-key-here",
-    "EXA_API_KEY": "your-exa-api-key-here"
+    "GROK_MODEL": "grok-3",
+    "EXA_API_KEY": "your-exa-api-key-here",
+    "EXA_BASE_URL": "https://api.exa.ai",
+    "TAVILY_API_URL": "https://api.tavily.com",
+    "TAVILY_API_KEY": "your-tavily-api-key-here",
+    "FIRECRAWL_API_KEY": "your-firecrawl-api-key-here"
   }
 }'
 ```
 
 > **环境变量说明**：
-> | 变量 | 必填 | 说明 |
-> |------|------|------|
-> | `GROK_API_URL` | ✅ | Grok API 端点（OpenAI 格式） |
-> | `GROK_API_KEY` | ✅ | Grok API 密钥 |
-> | `EXA_API_KEY` | ❌ | Exa API 密钥（不配置则 Exa 工具返回友好错误） |
-> | `EXA_BASE_URL` | ❌ | Exa API 地址（默认 `https://api.exa.ai`） |
-> | `EXA_TIMEOUT_SECONDS` | ❌ | Exa 请求超时（默认 30 秒） |
-> | `GROK_OUTPUT_CLEANUP` | ❌ | 输出净化开关（默认 `true`，剥离 `<think>` 标签和拒绝前缀） |
+>
+> | 变量 | 必填 | 默认值 | 说明 |
+> |------|------|--------|------|
+> | `GROK_API_URL` | ✅ | - | Grok API 端点（OpenAI 兼容格式） |
+> | `GROK_API_KEY` | ✅ | - | Grok API 密钥 |
+> | `GROK_MODEL` | ❌ | 按 API 可用模型自动选择 | 指定 Grok 模型 ID（如 `grok-3`、`grok-4-fast`） |
+> | `EXA_API_KEY` | ❌ | - | Exa API 密钥（不配置则 Exa 工具返回友好错误） |
+> | `EXA_BASE_URL` | ❌ | `https://api.exa.ai` | Exa API 地址 |
+> | `EXA_TIMEOUT_SECONDS` | ❌ | `30` | Exa 请求超时（秒） |
+> | `TAVILY_API_KEY` | ❌ | - | Tavily API 密钥（用于 `web_fetch` 和 `web_map`） |
+> | `TAVILY_API_URL` | ❌ | `https://api.tavily.com` | Tavily API 地址 |
+> | `TAVILY_ENABLED` | ❌ | `true` | 是否启用 Tavily |
+> | `FIRECRAWL_API_KEY` | ❌ | - | Firecrawl API 密钥（`web_fetch` 的降级抓取方案） |
+> | `FIRECRAWL_API_URL` | ❌ | `https://api.firecrawl.dev/v2` | Firecrawl API 地址 |
+> | `GROK_OUTPUT_CLEANUP` | ❌ | `true` | 输出净化开关（剥离 `<think>` 标签和拒绝前缀） |
+> | `GROK_DEBUG` | ❌ | `false` | 调试模式 |
+> | `GROK_LOG_LEVEL` | ❌ | `INFO` | 日志级别（DEBUG/INFO/WARNING/ERROR） |
+> | `GROK_LOG_DIR` | ❌ | `logs` | 日志目录 |
 
 
 ### Step 2. 验证安装 & 检查MCP配置
@@ -170,23 +185,27 @@ claude mcp list
 
 #### 精简版提示词
 ```markdown
-# Grok Search 提示词 精简版
+# Smart Search 提示词 精简版
 ## 激活与路由
 **触发**：网络搜索/网页抓取/最新信息查询时自动激活
-**替换**：尽可能使用 Grok-search的工具替换官方原生search以及fetch功能
+**替换**：尽可能使用 smart-search 的工具替换官方原生 search 以及 fetch 功能
 
 ## 工具矩阵
 
 | Tool | Parameters | Output | Use Case |
 |------|------------|--------|----------|
-| `web_search` | `query`(必填), `platform`/`min_results`/`max_results`(可选) | `[{title,url,content}]` | 多源聚合/事实核查/最新资讯 |
+| `web_search` | `query`(必填), `platform`/`model`/`extra_sources`(可选) | `{session_id, content, sources_count}` | 实时搜索/多源聚合/事实核查 |
+| `get_sources` | `session_id`(必填) | `{sources[]}` | 获取 web_search 的信源列表 |
 | `web_fetch` | `url`(必填) | Structured Markdown | 完整内容获取/深度分析 |
-| `get_config_info` | 无 | `{api_url,status,test}` | 连接诊断 |
-| `switch_model` | `model`(必填) | `{status,previous_model,current_model}` | 切换Grok模型/性能优化 |
-| `toggle_builtin_tools` | `action`(可选: on/off/status) | `{blocked,deny_list,file}` | 禁用/启用官方工具 |
+| `web_map` | `url`(必填), `instructions`/`max_depth`/`limit`(可选) | JSON sitemap | 站点结构映射 |
+| `exa_search` | `query`(必填), `num_results`/`search_type`/`include_text`(可选) | JSON results | 官方文档/API参考/源头精准检索 |
+| `exa_find_similar` | `url`(必填) | JSON results | 发现相似页面资源 |
+| `get_config_info` | 无 | `{config, connection_tests}` | 连接诊断（Grok/Exa/Tavily/Firecrawl） |
+| `switch_model` | `model`(必填) | `{status, current_model}` | 切换 Grok 模型 |
+| `toggle_builtin_tools` | `action`(可选: on/off/status) | `{blocked, deny_list}` | 禁用/启用官方工具 |
 
 ## 执行策略
-**查询构建**：广度用 `web_search`，深度用 `web_fetch`，特定平台设 `platform` 参数
+**查询构建**：实时综合用 `web_search`，官方文档用 `exa_search`，完整页面用 `web_fetch`，特定平台设 `platform` 参数
 **搜索执行**：优先摘要 → 关键 URL 补充完整内容 → 结果不足调整查询重试（禁止放弃）
 **结果整合**：交叉验证 + **强制标注来源** `[标题](URL)` + 时间敏感信息注明日期
 
@@ -197,7 +216,7 @@ claude mcp list
 
 ## 核心约束
 
-✅ 强制 GrokSearch 工具 + 输出必含来源引用 + 失败必重试 + 关键信息必验证
+✅ 强制 Smart Search 工具 + 输出必含来源引用 + 失败必重试 + 关键信息必验证
 ❌ 禁止无来源输出 + 禁止单次放弃 + 禁止未验证假设
 ```
 
@@ -207,7 +226,7 @@ claude mcp list
 
 ````markdown
 
-  # Grok Search Enhance 系统提示词（详细版）
+  # Smart Search Enhance 系统提示词（详细版）
 
   ## 0. Module Activation
   **触发条件**：当需要执行以下操作时，自动激活本模块：
@@ -218,37 +237,46 @@ claude mcp list
   ## 1. Tool Routing Policy
 
   ### 强制替换规则
-  | 需求场景 | ❌ 禁用 (Built-in) | ✅ 强制使用 (GrokSearch) |
+  | 需求场景 | ❌ 禁用 (Built-in) | ✅ 强制使用 (Smart Search) |
   | :--- | :--- | :--- |
-  | 网络搜索 | `WebSearch` | `mcp__grok-search__web_search` |
-  | 网页抓取 | `WebFetch` | `mcp__grok-search__web_fetch` |
-  | 配置诊断 | N/A | `mcp__grok-search__get_config_info` |
+  | 网络搜索 | `WebSearch` | `mcp__smart-search__web_search` |
+  | 网页抓取 | `WebFetch` | `mcp__smart-search__web_fetch` |
+  | 配置诊断 | N/A | `mcp__smart-search__get_config_info` |
 
   ### 工具能力矩阵
 
 | Tool | Parameters | Output | Use Case |
 |------|------------|--------|----------|
-| `web_search` | `query`(必填), `platform`/`min_results`/`max_results`(可选) | `[{title,url,content}]` | 多源聚合/事实核查/最新资讯 |
+| `web_search` | `query`(必填), `platform`/`model`/`extra_sources`(可选) | `{session_id, content, sources_count}` | 实时搜索/多源聚合/事实核查 |
+| `get_sources` | `session_id`(必填) | `{sources[]}` | 获取 web_search 的信源列表 |
 | `web_fetch` | `url`(必填) | Structured Markdown | 完整内容获取/深度分析 |
-| `get_config_info` | 无 | `{api_url,status,test}` | 连接诊断 |
-| `switch_model` | `model`(必填) | `{status,previous_model,current_model}` | 切换Grok模型/性能优化 |
-| `toggle_builtin_tools` | `action`(可选: on/off/status) | `{blocked,deny_list,file}` | 禁用/启用官方工具 |
+| `web_map` | `url`(必填), `instructions`/`max_depth`/`limit`(可选) | JSON sitemap | 站点结构映射 |
+| `exa_search` | `query`(必填), `num_results`/`search_type`/`include_text`(可选) | JSON results | 官方文档/API参考/源头精准检索 |
+| `exa_find_similar` | `url`(必填) | JSON results | 发现相似页面资源 |
+| `get_config_info` | 无 | `{config, connection_tests}` | 连接诊断（Grok/Exa/Tavily/Firecrawl） |
+| `switch_model` | `model`(必填) | `{status, current_model}` | 切换 Grok 模型 |
+| `toggle_builtin_tools` | `action`(可选: on/off/status) | `{blocked, deny_list}` | 禁用/启用官方工具 |
+| `plan_intent` ~ `plan_execution` | 详见规划工具文档 | JSON session state | 6 阶段搜索规划（复杂研究任务） |
 
 
   ## 2. Search Workflow
 
   ### Phase 1: 查询构建 (Query Construction)
   1.  **意图识别**：分析用户需求，确定搜索类型：
-      - **广度搜索**：多源信息聚合 → 使用 `web_search`
+      - **实时综合搜索**：多源信息聚合 → 使用 `web_search`
+      - **源头精准检索**：官方文档/API参考 → 使用 `exa_search`
       - **深度获取**：单一 URL 完整内容 → 使用 `web_fetch`
+      - **站点发现**：映射网站结构 → 使用 `web_map`
   2.  **参数优化**：
       - 若需聚焦特定平台，设置 `platform` 参数
-      - 根据需求复杂度调整 `min_results` / `max_results`
+      - 需要额外参考信源时设置 `extra_sources`
+      - 使用 `exa_search` 时可设置 `include_text=true` 获取页面正文
 
   ### Phase 2: 搜索执行 (Search Execution)
-  1.  **首选策略**：优先使用 `web_search` 获取结构化摘要
-  2.  **深度补充**：若摘要不足以回答问题，对关键 URL 调用 `web_fetch` 获取完整内容
-  3.  **迭代检索**：若首轮结果不满足需求，**调整查询词**后重新搜索（禁止直接放弃）
+  1.  **首选策略**：实时信息用 `web_search`，权威文档用 `exa_search`
+  2.  **深度补充**：若摘要不足，对关键 URL 调用 `web_fetch` 获取完整内容
+  3.  **信源追溯**：对 `web_search` 结果好奇时，用 `get_sources` 获取完整信源列表
+  4.  **迭代检索**：若首轮结果不满足需求，**调整查询词**后重新搜索（禁止直接放弃）
 
   ### Phase 3: 结果整合 (Result Synthesis)
   1.  **信息验证**：交叉比对多源结果，识别矛盾信息
@@ -263,6 +291,8 @@ claude mcp list
   | 无搜索结果 | 检查 query 是否过于具体 | 放宽搜索词，移除限定条件 |
   | 网页抓取超时 | 检查 URL 可访问性 | 尝试搜索替代来源 |
   | 内容被截断 | 检查目标页面结构 | 分段抓取或提示用户直接访问 |
+  | Grok 不可用 | 自动降级 | 改用 `exa_search` 替代 |
+  | Exa 不可用 | 自动降级 | 改用 `web_search` 替代 |
 
   ## 4. Anti-Patterns
 
@@ -275,9 +305,9 @@ claude mcp list
 
   ---
   模块说明：
-  - 强制替换：明确禁用内置工具，强制路由到 GrokSearch
-  - 三工具覆盖：web_search + web_fetch + get_config_info
-  - 错误处理：包含配置诊断的恢复策略
+  - 强制替换：明确禁用内置工具，强制路由到 Smart Search
+  - 多工具覆盖：web_search + exa_search + web_fetch + web_map + get_sources 等 15 个工具
+  - 错误处理：包含配置诊断和自动降级策略
   - 引用规范：强制标注来源，符合信息可追溯性要求
 ````
 
@@ -287,78 +317,63 @@ claude mcp list
 
 #### MCP 工具说明
 
-本项目提供七个 MCP 工具：
+本项目提供 **15 个** MCP 工具，分为 4 类：
 
-##### `web_search` - 网络搜索
+##### 搜索与抓取（5 个）
+
+###### `web_search` - 网络搜索
 
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
 | `query` | string | ✅ | - | 搜索查询语句 |
-| `platform` | string | ❌ | `""` | 聚焦搜索平台（如 `"Twitter"`, `"GitHub, Reddit"`） |
-| `min_results` | int | ❌ | `3` | 最少返回结果数 |
-| `max_results` | int | ❌ | `10` | 最多返回结果数 |
+| `platform` | string | ❌ | `""` | 聚焦搜索平台（如 `"Twitter"`, `"GitHub"`, `"Reddit"`） |
+| `model` | string | ❌ | `""` | 临时指定 Grok 模型 ID（仅本次调用生效） |
+| `extra_sources` | int | ❌ | `0` | 额外信源数量（通过 Tavily/Firecrawl 补充参考结果） |
 
-**返回**：包含 `title`、`url`、`content` 的 JSON 数组
-
+**返回**：`dict`，包含 `session_id`（用于后续调用 `get_sources`）、`content`（答案正文）、`sources_count`（信源数量）
 
 <details>
 <summary><b>返回示例</b>（点击展开）</summary>
 
 ```json
-[
-  {
-    "title": "Claude Code - Anthropic官方CLI工具",
-    "url": "https://claude.com/claude-code",
-    "description": "Anthropic推出的官方命令行工具，支持MCP协议集成，提供代码生成和项目管理功能"
-  },
-  {
-    "title": "Model Context Protocol (MCP) 技术规范",
-    "url": "https://modelcontextprotocol.io/docs",
-    "description": "MCP协议官方文档，定义了AI模型与外部工具的标准化通信接口"
-  },
-  {
-    ...
-  }
-]
+{
+  "session_id": "a1b2c3d4e5f6",
+  "content": "Claude Code 是 Anthropic 推出的官方命令行工具...",
+  "sources_count": 5
+}
 ```
 </details>
 
-##### `web_fetch` - 网页内容抓取
+###### `get_sources` - 获取信源列表
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `session_id` | string | ✅ | `web_search` 返回的 session_id |
+
+**功能**：获取上一次 `web_search` 的完整信源列表（含 Grok 提取的信源 + Tavily/Firecrawl 额外信源）
+
+###### `web_fetch` - 网页内容抓取
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `url` | string | ✅ | 目标网页 URL |
 
-**功能**：获取完整网页内容并转换为结构化 Markdown，保留标题层级、列表、表格、代码块等元素
+**功能**：获取完整网页内容并转换为结构化 Markdown。抓取链路：Tavily Extract → Firecrawl Scrape（自动降级）
 
-<details>
-<summary><b>返回示例</b>（点击展开）</summary>
+###### `web_map` - 站点地图
 
-```markdown
----
-source: https://modelcontextprotocol.io/docs/concepts/architecture
-title: MCP 架构设计文档
-fetched_at: 2024-01-15T10:30:00Z
----
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `url` | string | ✅ | - | 起始 URL |
+| `instructions` | string | ❌ | `""` | 自然语言过滤指令 |
+| `max_depth` | int | ❌ | `1` | 最大爬取深度（1-5） |
+| `max_breadth` | int | ❌ | `20` | 每页最大链接数（1-500） |
+| `limit` | int | ❌ | `50` | 总处理链接数上限（1-500） |
+| `timeout` | int | ❌ | `150` | 超时秒数（10-150） |
 
-# MCP 架构设计文档
+**功能**：以图遍历方式映射网站结构，发现 URL 并生成站点地图（基于 Tavily Map）
 
-## 目录
-- [核心概念](#核心概念)
-- [协议层次](#协议层次)
-- [通信模式](#通信模式)
-
-## 核心概念
-
-Model Context Protocol (MCP) 是一个标准化的通信协议，用于连接 AI 模型与外部工具和数据源。
-...
-
-更多信息请访问 [官方文档](https://modelcontextprotocol.io)
-```
-</details>
-
-
-##### `exa_search` - Exa 精准搜索
+###### `exa_search` - Exa 精准搜索
 
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
@@ -374,7 +389,9 @@ Model Context Protocol (MCP) 是一个标准化的通信协议，用于连接 AI
 
 **定位**：源头精准检索，适合官方文档、API 参考、产品页面、研究论文等低噪声场景
 
-##### `exa_find_similar` - Exa 相似页面发现
+##### 发现与诊断（3 个）
+
+###### `exa_find_similar` - Exa 相似页面发现
 
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
@@ -383,106 +400,42 @@ Model Context Protocol (MCP) 是一个标准化的通信协议，用于连接 AI
 
 **功能**：基于给定 URL 发现相似的网页资源
 
-##### `get_config_info` - 配置信息查询
+###### `get_config_info` - 配置信息查询
 
-**无需参数**。显示配置状态、测试 API 连接、返回响应时间和可用模型数量（API Key 自动脱敏）
+**无需参数**。显示配置状态，并行测试 Grok / Exa / Tavily / Firecrawl 四个 API 的连通性（API Key 自动脱敏）
 
-<details>
-<summary><b>返回示例</b>（点击展开）</summary>
-
-```json
-{
-  "api_url": "https://YOUR-API-URL/grok/v1",
-  "api_key": "sk-a*****************xyz",
-  "config_status": "✅ 配置完整",
-  "connection_test": {
-    "status": "✅ 连接成功",
-    "message": "成功获取模型列表 (HTTP 200)，共 x 个模型",
-    "response_time_ms": 234.56
-  }
-}
-```
-
-</details>
-
-##### `switch_model` - 模型切换
+###### `switch_model` - 模型切换
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `model` | string | ✅ | 要切换到的模型 ID（如 `"grok-4-fast"`, `"grok-2-latest"`, `"grok-vision-beta"`） |
+| `model` | string | ✅ | 要切换到的模型 ID（如 `"grok-4-fast"`, `"grok-2-latest"`） |
 
-**功能**：
-- 切换用于搜索和抓取操作的默认 Grok 模型
-- 配置自动持久化到 `~/.config/smart-search/config.json`
-- 支持跨会话保持设置
-- 适用于性能优化或质量对比测试
+**功能**：切换默认 Grok 模型，配置持久化到 `~/.config/smart-search/config.json`
 
-<details>
-<summary><b>返回示例</b>（点击展开）</summary>
+##### 工具路由控制（1 个）
 
-```json
-{
-  "status": "✅ 成功",
-  "previous_model": "grok-4-fast",
-  "current_model": "grok-2-latest",
-  "message": "模型已从 grok-4-fast 切换到 grok-2-latest",
-  "config_file": "/home/user/.config/smart-search/config.json"
-}
-```
-
-**使用示例**：
-
-在 Claude 对话中输入：
-```
-请将 Grok 模型切换到 grok-2-latest
-```
-
-或直接说：
-```
-切换模型到 grok-vision-beta
-```
-
-</details>
-
-##### `toggle_builtin_tools` - 工具路由控制
+###### `toggle_builtin_tools` - 禁用/启用 Claude Code 官方工具
 
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
-| `action` | string | ❌ | `"status"` | 操作类型：`"on"`/`"enable"`(禁用官方工具)、`"off"`/`"disable"`(启用官方工具)、`"status"`/`"check"`(查看状态) |
+| `action` | string | ❌ | `"status"` | `"on"` 禁用官方工具 / `"off"` 启用 / `"status"` 查看状态 |
 
-**功能**：
-- 控制项目级 `.claude/settings.json` 的 `permissions.deny` 配置
-- 禁用/启用 Claude Code 官方的 `WebSearch` 和 `WebFetch` 工具
-- 强制路由到 GrokSearch MCP 工具
-- 自动定位项目根目录（查找 `.git`）
-- 保留其他配置项
+**功能**：控制项目级 `.claude/settings.json` 的 `permissions.deny`，一键禁用/启用 Claude Code 官方的 `WebSearch` 和 `WebFetch`
 
-<details>
-<summary><b>返回示例</b>（点击展开）</summary>
+##### 搜索规划（6 个）
 
-```json
-{
-  "blocked": true,
-  "deny_list": ["WebFetch", "WebSearch"],
-  "file": "/path/to/project/.claude/settings.json",
-  "message": "官方工具已禁用"
-}
-```
+6 阶段搜索规划引擎，用于复杂多步研究任务。**必须按顺序调用**，按复杂度级别限制可用阶段：
 
-**使用示例**：
+| 工具 | 阶段 | 功能 |
+|------|------|------|
+| `plan_intent` | 1 | 分析用户意图，创建规划会话 |
+| `plan_complexity` | 2 | 评估搜索复杂度（Level 1-3） |
+| `plan_sub_query` | 3 | 分解为子查询（可多次调用，累积） |
+| `plan_search_term` | 4 | 定义搜索词（Level 2+ 可用） |
+| `plan_tool_mapping` | 5 | 映射子查询到工具（Level 2+ 可用） |
+| `plan_execution` | 6 | 定义执行顺序（Level 3 可用） |
 
-```
-# 禁用官方工具（推荐）
-禁用官方的 search 和 fetch 工具
-
-# 启用官方工具
-启用官方的 search 和 fetch 工具
-
-# 检查当前状态
-显示官方工具的禁用状态
-```
-
-</details>
+> Level 1 = 阶段 1-3 | Level 2 = 阶段 1-5 | Level 3 = 全部 6 阶段
 
 ---
 
