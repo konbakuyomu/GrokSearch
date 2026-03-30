@@ -77,7 +77,7 @@ def _looks_like_policy_block(text: str) -> bool:
 
 
 def sanitize_answer_text(text: str) -> str:
-    text = _THINK_BLOCK_PATTERN.sub("", text).strip()
+    text = _THINK_BLOCK_PATTERN.sub("", text or "").strip()
     if not text:
         return ""
 

@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime
-from pathlib import Path
 from .config import config
 
 LOG_DIR = config.log_dir

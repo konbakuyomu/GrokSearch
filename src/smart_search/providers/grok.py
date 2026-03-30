@@ -5,7 +5,6 @@ from email.utils import parsedate_to_datetime
 from typing import List, Optional
 from tenacity import AsyncRetrying, retry_if_exception, stop_after_attempt, wait_random_exponential
 from tenacity.wait import wait_base
-from zoneinfo import ZoneInfo
 from .base import BaseSearchProvider, SearchResult
 from ..utils import search_prompt, fetch_prompt, url_describe_prompt, rank_sources_prompt
 from ..logger import log_info
@@ -85,11 +84,16 @@ class GrokSearchProvider(BaseSearchProvider):
     def get_provider_name(self) -> str:
         return "Grok"
 
-    async def search(self, query: str, platform: str = "", ctx=None) -> List[SearchResult]:
-        headers = {
+    def _build_api_headers(self) -> dict:
+        return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+            "User-Agent": "smart-search-mcp/0.3.0",
         }
+
+    async def search(self, query: str, platform: str = "", ctx=None) -> List[SearchResult]:
+        headers = self._build_api_headers()
         platform_prompt = ""
 
         if platform:
@@ -106,18 +110,15 @@ class GrokSearchProvider(BaseSearchProvider):
                 },
                 {"role": "user", "content": time_context + query + platform_prompt},
             ],
-            "stream": True,
+            "stream": False,
         }
 
         await log_info(ctx, f"platform_prompt: { query + platform_prompt}", config.debug_enabled)
 
-        return await self._execute_stream_with_retry(headers, payload, ctx)
+        return await self._execute_completion_with_retry(headers, payload, ctx)
 
     async def fetch(self, url: str, ctx=None) -> str:
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
+        headers = self._build_api_headers()
         payload = {
             "model": self.model,
             "messages": [
@@ -127,9 +128,9 @@ class GrokSearchProvider(BaseSearchProvider):
                 },
                 {"role": "user", "content": url + "\n获取该网页内容并返回其结构化Markdown格式" },
             ],
-            "stream": True,
+            "stream": False,
         }
-        return await self._execute_stream_with_retry(headers, payload, ctx)
+        return await self._execute_completion_with_retry(headers, payload, ctx)
 
     async def _parse_streaming_response(self, response, ctx=None) -> str:
         content = ""
@@ -190,20 +191,70 @@ class GrokSearchProvider(BaseSearchProvider):
                         response.raise_for_status()
                         return await self._parse_streaming_response(response, ctx)
 
+    async def _parse_completion_response(self, response: httpx.Response, ctx=None) -> str:
+        """解析非流式 completion 响应，兼容 JSON 和 SSE 文本 fallback"""
+        content = ""
+        body_text = response.text or ""
+
+        try:
+            data = response.json()
+        except Exception:
+            data = None
+
+        if isinstance(data, dict):
+            choices = data.get("choices", [])
+            if choices:
+                message = choices[0].get("message", {})
+                if isinstance(message, dict):
+                    content = message.get("content", "") or ""
+
+        # SSE fallback: 部分中转站即使设置 stream=False 仍可能返回 SSE 格式
+        if not content and body_text.lstrip().startswith("data:"):
+            class _LineResponse:
+                def __init__(self, text: str):
+                    self._lines = text.splitlines()
+
+                async def aiter_lines(self):
+                    for line in self._lines:
+                        yield line
+
+            content = await self._parse_streaming_response(_LineResponse(body_text), ctx)
+
+        await log_info(ctx, f"content: {content}", config.debug_enabled)
+
+        return content
+
+    async def _execute_completion_with_retry(self, headers: dict, payload: dict, ctx=None) -> str:
+        """执行带重试机制的非流式 HTTP 请求，兼容上游返回 JSON 或 SSE 文本"""
+        timeout = httpx.Timeout(connect=6.0, read=120.0, write=10.0, pool=None)
+
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            async for attempt in AsyncRetrying(
+                stop=stop_after_attempt(config.retry_max_attempts + 1),
+                wait=_WaitWithRetryAfter(config.retry_multiplier, config.retry_max_wait),
+                retry=retry_if_exception(_is_retryable_exception),
+                reraise=True,
+            ):
+                with attempt:
+                    response = await client.post(
+                        f"{self.api_url}/chat/completions",
+                        headers=headers,
+                        json=payload,
+                    )
+                    response.raise_for_status()
+                    return await self._parse_completion_response(response, ctx)
+
     async def describe_url(self, url: str, ctx=None) -> dict:
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
+        headers = self._build_api_headers()
         payload = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": url_describe_prompt},
                 {"role": "user", "content": url},
             ],
-            "stream": True,
+            "stream": False,
         }
-        result = await self._execute_stream_with_retry(headers, payload, ctx)
+        result = await self._execute_completion_with_retry(headers, payload, ctx)
         title, extracts = url, ""
         for line in result.strip().splitlines():
             if line.startswith("Title:"):
@@ -213,19 +264,17 @@ class GrokSearchProvider(BaseSearchProvider):
         return {"title": title, "extracts": extracts, "url": url}
 
     async def rank_sources(self, query: str, sources_text: str, total: int, ctx=None) -> list[int]:
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
+        """让 Grok 按查询相关度对信源排序，返回排序后的序号列表"""
+        headers = self._build_api_headers()
         payload = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": rank_sources_prompt},
                 {"role": "user", "content": f"Query: {query}\n\n{sources_text}"},
             ],
-            "stream": True,
+            "stream": False,
         }
-        result = await self._execute_stream_with_retry(headers, payload, ctx)
+        result = await self._execute_completion_with_retry(headers, payload, ctx)
         order: list[int] = []
         seen: set[int] = set()
         for token in result.strip().split():

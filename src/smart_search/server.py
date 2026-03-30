@@ -70,6 +70,40 @@ def _planning_session_error(session_id: str) -> str:
     }, ensure_ascii=False, indent=2)
 
 
+def _extract_request_id(headers) -> str:
+    """从上游响应 headers 中提取请求 ID，用于错误追踪"""
+    if not headers:
+        return ""
+    return (
+        headers.get("x-oneapi-request-id", "")
+        or headers.get("x-request-id", "")
+        or headers.get("request-id", "")
+    ).strip()
+
+
+def _extract_error_summary(response) -> str:
+    """从错误响应中提取摘要信息"""
+    if response is None:
+        return ""
+    try:
+        data = response.json()
+    except Exception:
+        data = None
+
+    if isinstance(data, dict):
+        err = data.get("error")
+        if isinstance(err, dict):
+            return err.get("message", "") or str(err)
+        if isinstance(err, str):
+            return err
+        msg = data.get("message", "")
+        if msg:
+            return msg
+
+    text = getattr(response, "text", "") or ""
+    return text[:200] if text else ""
+
+
 async def _get_available_models_cached(api_url: str, api_key: str) -> list[str]:
     key = (api_url, api_key)
     async with _AVAILABLE_MODELS_LOCK:

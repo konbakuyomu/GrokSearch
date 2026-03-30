@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__smart-search__web_fetch",
+      "mcp__smart-search__web_search",
+      "mcp__smart-search__exa_search"
+    ]
+  }
+}
