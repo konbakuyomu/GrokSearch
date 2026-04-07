@@ -162,3 +162,69 @@ async def test_build_api_headers():
     assert headers["Content-Type"] == "application/json"
     assert "text/event-stream" in headers["Accept"]
     assert headers["User-Agent"].startswith("smart-search-mcp/")
+
+
+# ─── SSL verification tests ─────────────────────────────────────────────────
+
+
+def test_ssl_verify_default():
+    """验证 ssl_verify_enabled 默认为 True"""
+    from smart_search.config import Config
+    c = Config.__new__(Config)
+    c._config_file = None
+    c._cached_model = None
+    assert c.ssl_verify_enabled is True
+
+
+def test_ssl_verify_disabled(monkeypatch):
+    """验证 SSL_VERIFY=false 时 ssl_verify_enabled 为 False"""
+    monkeypatch.setenv("SSL_VERIFY", "false")
+    from smart_search.config import Config
+    c = Config.__new__(Config)
+    c._config_file = None
+    c._cached_model = None
+    assert c.ssl_verify_enabled is False
+
+
+def test_ssl_verify_disabled_zero(monkeypatch):
+    """验证 SSL_VERIFY=0 时 ssl_verify_enabled 为 False"""
+    monkeypatch.setenv("SSL_VERIFY", "0")
+    from smart_search.config import Config
+    c = Config.__new__(Config)
+    c._config_file = None
+    c._cached_model = None
+    assert c.ssl_verify_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_get_ssl_verify_returns_config_value(monkeypatch):
+    """验证 _get_ssl_verify 返回 config 中的 ssl_verify_enabled"""
+    import smart_search.providers.grok as grok_mod
+    grok_mod._ssl_warning_emitted = False
+
+    provider = GrokSearchProvider("https://api.example.com", "test-key", "test-model")
+
+    monkeypatch.setenv("SSL_VERIFY", "true")
+    assert provider._get_ssl_verify() is True
+
+    grok_mod._ssl_warning_emitted = False
+    monkeypatch.setenv("SSL_VERIFY", "false")
+    assert provider._get_ssl_verify() is False
+
+
+@pytest.mark.asyncio
+async def test_ssl_warning_emitted_once(monkeypatch, caplog):
+    """验证禁用 SSL 时警告仅打印一次"""
+    import logging
+    import smart_search.providers.grok as grok_mod
+    grok_mod._ssl_warning_emitted = False
+
+    provider = GrokSearchProvider("https://api.example.com", "test-key", "test-model")
+    monkeypatch.setenv("SSL_VERIFY", "false")
+
+    with caplog.at_level(logging.WARNING, logger="smart_search.providers.grok"):
+        provider._get_ssl_verify()
+        provider._get_ssl_verify()
+
+    warning_count = sum(1 for r in caplog.records if "SSL_VERIFY=false" in r.message)
+    assert warning_count == 1

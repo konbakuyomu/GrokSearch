@@ -1,5 +1,6 @@
 import httpx
 import json
+import logging
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import List, Optional
@@ -9,6 +10,9 @@ from .base import BaseSearchProvider, SearchResult
 from ..utils import search_prompt, fetch_prompt, url_describe_prompt, rank_sources_prompt
 from ..logger import log_info
 from ..config import config
+
+_logger = logging.getLogger(__name__)
+_ssl_warning_emitted = False
 
 
 def get_local_time_info() -> str:
@@ -92,6 +96,14 @@ class GrokSearchProvider(BaseSearchProvider):
             "User-Agent": "smart-search-mcp/0.3.0",
         }
 
+    def _get_ssl_verify(self) -> bool:
+        global _ssl_warning_emitted
+        verify = config.ssl_verify_enabled
+        if not verify and not _ssl_warning_emitted:
+            _ssl_warning_emitted = True
+            _logger.warning("SSL_VERIFY=false: Grok API 请求已禁用 SSL 证书验证，存在安全风险")
+        return verify
+
     async def search(self, query: str, platform: str = "", ctx=None) -> List[SearchResult]:
         headers = self._build_api_headers()
         platform_prompt = ""
@@ -174,7 +186,7 @@ class GrokSearchProvider(BaseSearchProvider):
     async def _execute_stream_with_retry(self, headers: dict, payload: dict, ctx=None) -> str:
         timeout = httpx.Timeout(connect=6.0, read=120.0, write=10.0, pool=None)
 
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, verify=self._get_ssl_verify()) as client:
             async for attempt in AsyncRetrying(
                 stop=stop_after_attempt(config.retry_max_attempts + 1),
                 wait=_WaitWithRetryAfter(config.retry_multiplier, config.retry_max_wait),
@@ -228,7 +240,7 @@ class GrokSearchProvider(BaseSearchProvider):
         """执行带重试机制的非流式 HTTP 请求，兼容上游返回 JSON 或 SSE 文本"""
         timeout = httpx.Timeout(connect=6.0, read=120.0, write=10.0, pool=None)
 
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, verify=self._get_ssl_verify()) as client:
             async for attempt in AsyncRetrying(
                 stop=stop_after_attempt(config.retry_max_attempts + 1),
                 wait=_WaitWithRetryAfter(config.retry_multiplier, config.retry_max_wait),

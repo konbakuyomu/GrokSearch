@@ -175,6 +175,10 @@ class Config:
         return raw.lower() in ("true", "1", "yes")
 
     @property
+    def ssl_verify_enabled(self) -> bool:
+        return os.getenv("SSL_VERIFY", "true").lower() not in ("false", "0", "no")
+
+    @property
     def exa_api_key(self) -> str | None:
         return os.getenv("EXA_API_KEY")
 
@@ -210,6 +214,7 @@ class Config:
             "FIRECRAWL_API_URL": self.firecrawl_api_url,
             "FIRECRAWL_API_KEY": self._mask_api_key(self.firecrawl_api_key) if self.firecrawl_api_key else "未配置",
             "GROK_OUTPUT_CLEANUP": self.output_cleanup_enabled,
+            "SSL_VERIFY": self.ssl_verify_enabled,
             "EXA_API_KEY": self._mask_api_key(self.exa_api_key) if self.exa_api_key else "未配置",
             "EXA_BASE_URL": self.exa_base_url,
             "EXA_TIMEOUT_SECONDS": self.exa_timeout,
